@@ -41,13 +41,12 @@
   "main": "index.js",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/aldrinmolinar2-bot/clinick-frontend.git"
+    "url": "https://github.com/aldrinmolinar2-bot/clinick-frontend.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/aldrinmolinar2-bot/clinick-frontend/issues"
-  },
-  "homepage": "."
+  }
 }
