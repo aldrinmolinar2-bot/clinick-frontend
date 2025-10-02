@@ -37,7 +37,7 @@
       "last 1 safari version"
     ]
   },
-  "description": "This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).",
+  "description": "This project was bootstrapped with Create React App.",
   "main": "index.js",
   "repository": {
     "type": "git",
@@ -49,5 +49,5 @@
   "bugs": {
     "url": "https://github.com/aldrinmolinar2-bot/clinick-frontend/issues"
   },
-  "homepage": "https://github.com/aldrinmolinar2-bot/clinick-frontend#readme"
+  "homepage": "."
 }
