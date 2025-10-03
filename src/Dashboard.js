@@ -1,25 +1,22 @@
-// src/Dashboard.js
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
-const API = process.env.REACT_APP_API_URL || "http://localhost:5000"; 
-// must match the token your Login sets (you used "clinick-token")
+const API = process.env.REACT_APP_API_URL || "http://localhost:5000";
 const VALID_TOKEN = "clinick-token";
 const ALARMED_STORAGE_KEY = "clinick-alarmed";
 
 export default function Dashboard() {
   const [reports, setReports] = useState([]);
   const [expandedRows, setExpandedRows] = useState({});
-  const [activeAlarms, setActiveAlarms] = useState([]); 
+  const [activeAlarms, setActiveAlarms] = useState([]);
 
-  const activeAlarmsRef = useRef([]); 
-  const pendingAlarmsRef = useRef([]); 
-  const alarmedIdsRef = useRef(new Set()); 
-  const lastSeenTimeRef = useRef(null); 
+  const activeAlarmsRef = useRef([]);
+  const alarmedIdsRef = useRef(new Set());
   const pollingRef = useRef(null);
 
   const navigate = useNavigate();
 
+  // Persist alarmed IDs
   const persistAlarmedIds = () => {
     try {
       const arr = Array.from(alarmedIdsRef.current);
@@ -29,6 +26,7 @@ export default function Dashboard() {
     }
   };
 
+  // Load alarmed IDs from storage
   const loadAlarmedIds = () => {
     try {
       const raw = localStorage.getItem(ALARMED_STORAGE_KEY);
@@ -43,6 +41,7 @@ export default function Dashboard() {
     }
   };
 
+  // Stop all alarms
   const stopAllAlarms = () => {
     try {
       activeAlarmsRef.current.forEach((a) => {
@@ -59,73 +58,35 @@ export default function Dashboard() {
     }
   };
 
-  const playPendingAlarmsIfAllowed = () => {
-    const token = localStorage.getItem("token");
-    const onDashboard = typeof window !== "undefined" && window.location.pathname === "/dashboard";
-    const visible = typeof document !== "undefined" ? document.visibilityState === "visible" : true;
-
-    if (token !== VALID_TOKEN || !onDashboard || !visible) {
-      return; 
-    }
-
-    if (pendingAlarmsRef.current.length === 0) return;
-
-    const toPlay = pendingAlarmsRef.current.filter((r) => !alarmedIdsRef.current.has(r._id));
-    toPlay.forEach((report) => {
-      try {
-        const audio = new Audio("/siren.mp3");
-        audio.loop = true;
-        audio.play().catch((err) => console.error("Autoplay blocked:", err));
-
-        const alarmObj = { id: report._id, location: report.location, audio };
-        activeAlarmsRef.current = [...activeAlarmsRef.current, alarmObj];
-        setActiveAlarms((prev) => [...prev, alarmObj]);
-        alarmedIdsRef.current.add(report._id);
-      } catch (err) {
-        console.error("playPending error", err);
-      }
-    });
-
-    pendingAlarmsRef.current = [];
-    persistAlarmedIds();
-  };
-
-  const triggerAlarmForReport = (report) => {
+  // Trigger alarm for unseen report
+  const triggerAlarmForReport = async (report) => {
     if (!report || !report._id) return;
-    if (alarmedIdsRef.current.has(report._id)) return; 
+    if (alarmedIdsRef.current.has(report._id)) return;
 
-    const token = localStorage.getItem("token");
-    const onDashboard = typeof window !== "undefined" && window.location.pathname === "/dashboard";
-    const visible = typeof document !== "undefined" ? document.visibilityState === "visible" : true;
-    const canPlayNow = token === VALID_TOKEN && onDashboard && visible;
+    try {
+      const audio = new Audio("/siren.mp3");
+      audio.loop = true;
+      audio.play().catch((err) => console.error("Autoplay blocked:", err));
 
-    if (canPlayNow) {
-      try {
-        const audio = new Audio("/siren.mp3");
-        audio.loop = true;
-        audio.play().catch((err) => console.error("Autoplay blocked:", err));
+      const alarmObj = { id: report._id, location: report.location, audio };
+      activeAlarmsRef.current = [...activeAlarmsRef.current, alarmObj];
+      setActiveAlarms((prev) => [...prev, alarmObj]);
+      alarmedIdsRef.current.add(report._id);
+      persistAlarmedIds();
 
-        const alarmObj = { id: report._id, location: report.location, audio };
-        activeAlarmsRef.current = [...activeAlarmsRef.current, alarmObj];
-        setActiveAlarms((prev) => [...prev, alarmObj]);
-        alarmedIdsRef.current.add(report._id);
-        persistAlarmedIds();
-      } catch (e) {
-        console.error("triggerAlarmForReport error", e);
-      }
-    } else {
-      if (!pendingAlarmsRef.current.some((r) => r._id === report._id)) {
-        pendingAlarmsRef.current = [...pendingAlarmsRef.current, report];
-      }
+      // ✅ mark as seen in backend
+      await fetch(`${API}/reports/${report._id}/seen`, { method: "PUT" });
+    } catch (e) {
+      console.error("triggerAlarmForReport error", e);
     }
   };
 
+  // Fetch reports
   const fetchReports = async () => {
     try {
       const token = localStorage.getItem("token");
       if (!token || token !== VALID_TOKEN) {
         stopAllAlarms();
-        pendingAlarmsRef.current = [];
         return;
       }
 
@@ -140,31 +101,9 @@ export default function Dashboard() {
       const reportArray = Array.isArray(data) ? data : [];
       setReports(reportArray);
 
-      if (reportArray.length === 0) return;
-
-      const newestTimestamp = Math.max(...reportArray.map((r) => new Date(r.createdAt).getTime()));
-      const lastLogoutRaw = localStorage.getItem("lastLogoutTime");
-      const cutoff = lastLogoutRaw ? Number(lastLogoutRaw) : null;
-
-      if (lastSeenTimeRef.current === null) {
-        if (cutoff) {
-          const missedReports = reportArray.filter(
-            (r) => new Date(r.createdAt).getTime() > cutoff && !alarmedIdsRef.current.has(r._id)
-          );
-          missedReports.forEach((r) => triggerAlarmForReport(r));
-        }
-        lastSeenTimeRef.current = newestTimestamp;
-      } else {
-        const newOnes = reportArray.filter(
-          (r) => new Date(r.createdAt).getTime() > lastSeenTimeRef.current && !alarmedIdsRef.current.has(r._id)
-        );
-        newOnes.forEach((r) => triggerAlarmForReport(r));
-        if (newOnes.length > 0) {
-          lastSeenTimeRef.current = Math.max(newestTimestamp, lastSeenTimeRef.current);
-        }
-      }
-
-      playPendingAlarmsIfAllowed();
+      // Find unseen reports
+      const unseen = reportArray.filter((r) => !r.seen);
+      unseen.forEach((r) => triggerAlarmForReport(r));
     } catch (err) {
       console.error("Error fetching reports:", err);
     }
@@ -172,35 +111,21 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadAlarmedIds();
-    lastSeenTimeRef.current = null;
-    pendingAlarmsRef.current = [];
     stopAllAlarms();
 
-    const onVisibilityOrFocus = () => {
-      playPendingAlarmsIfAllowed();
-    };
-
-    document.addEventListener("visibilitychange", onVisibilityOrFocus);
-    window.addEventListener("focus", onVisibilityOrFocus);
-
     return () => {
-      document.removeEventListener("visibilitychange", onVisibilityOrFocus);
-      window.removeEventListener("focus", onVisibilityOrFocus);
       persistAlarmedIds();
       if (pollingRef.current) {
         clearInterval(pollingRef.current);
         pollingRef.current = null;
       }
       stopAllAlarms();
-      pendingAlarmsRef.current = [];
     };
   }, []);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
-    if (!token || token !== VALID_TOKEN) {
-      return;
-    }
+    if (!token || token !== VALID_TOKEN) return;
 
     fetchReports();
     pollingRef.current = setInterval(fetchReports, 5000);
@@ -214,11 +139,7 @@ export default function Dashboard() {
   }, []);
 
   const handleLogout = () => {
-    localStorage.setItem("lastLogoutTime", Date.now());
     localStorage.removeItem("token");
-
-    lastSeenTimeRef.current = null;
-    pendingAlarmsRef.current = [];
     stopAllAlarms();
     navigate("/login");
   };
