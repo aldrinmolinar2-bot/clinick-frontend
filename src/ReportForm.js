@@ -1,5 +1,8 @@
 import React, { useState } from "react";
-const API = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
+// Use deployed backend as fallback if env variable missing
+const API =
+  process.env.REACT_APP_API_URL || "https://clinick-backend.onrender.com";
 
 export default function ReportForm() {
   const [form, setForm] = useState({
@@ -36,15 +39,22 @@ export default function ReportForm() {
         });
         setTimeout(() => setPopup(false), 3000);
       } else {
-        alert("❌ Failed to submit");
+        alert("❌ Failed to submit. Please try again.");
       }
     } catch (err) {
-      alert("⚠️ Server error");
+      console.error("Report submission error:", err);
+      alert("⚠️ Server error. Please check your connection.");
     }
   };
 
   return (
-    <div style={{ maxWidth: "600px", margin: "40px auto", fontFamily: "Arial, sans-serif" }}>
+    <div
+      style={{
+        maxWidth: "600px",
+        margin: "40px auto",
+        fontFamily: "Arial, sans-serif",
+      }}
+    >
       <h1 style={{ textAlign: "center", marginBottom: "20px" }}>Clinick</h1>
 
       <form onSubmit={handleSubmit}>
@@ -123,7 +133,7 @@ export default function ReportForm() {
         />
 
         {/* Submit */}
-        <button type="submit" style={{ width: "100%", padding: "8px" }}>
+        <button type="submit" style={{ width: "100%", padding: "10px" }}>
           Submit Report
         </button>
       </form>
@@ -141,10 +151,21 @@ export default function ReportForm() {
             display: "flex",
             justifyContent: "center",
             alignItems: "center",
+            zIndex: 9999,
           }}
         >
-          <div style={{ background: "#fff", padding: "20px", borderRadius: "5px" }}>
-            <h2 style={{ color: "green" }}>✅ The clinic has been alerted!</h2>
+          <div
+            style={{
+              background: "#fff",
+              padding: "20px 30px",
+              borderRadius: "8px",
+              textAlign: "center",
+              boxShadow: "0 4px 10px rgba(0,0,0,0.2)",
+            }}
+          >
+            <h2 style={{ color: "green", margin: 0 }}>
+              ✅ The clinic has been alerted!
+            </h2>
           </div>
         </div>
       )}
