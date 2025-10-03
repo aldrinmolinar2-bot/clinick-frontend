@@ -28,7 +28,9 @@ export default function ReportForm() {
       });
 
       if (res.ok) {
+        console.log("✅ Report submitted successfully, showing popup...");
         setPopup(true);
+
         setForm({
           role: "",
           patientName: "",
@@ -37,12 +39,17 @@ export default function ReportForm() {
           severity: "",
           symptoms: "",
         });
-        setTimeout(() => setPopup(false), 3000);
+
+        setTimeout(() => {
+          console.log("⏱ Closing popup...");
+          setPopup(false);
+        }, 3000);
       } else {
+        console.error("❌ Failed response:", res.status);
         alert("❌ Failed to submit. Please try again.");
       }
     } catch (err) {
-      console.error("Report submission error:", err);
+      console.error("⚠️ Report submission error:", err);
       alert("⚠️ Server error. Please check your connection.");
     }
   };
@@ -147,7 +154,7 @@ export default function ReportForm() {
             left: 0,
             width: "100%",
             height: "100%",
-            background: "rgba(0,0,0,0.5)",
+            background: "rgba(0,0,0,0.6)",
             display: "flex",
             justifyContent: "center",
             alignItems: "center",
@@ -157,10 +164,11 @@ export default function ReportForm() {
           <div
             style={{
               background: "#fff",
-              padding: "20px 30px",
-              borderRadius: "8px",
+              padding: "25px 40px",
+              borderRadius: "10px",
               textAlign: "center",
-              boxShadow: "0 4px 10px rgba(0,0,0,0.2)",
+              boxShadow: "0 6px 15px rgba(0,0,0,0.3)",
+              animation: "fadeIn 0.3s ease-in-out",
             }}
           >
             <h2 style={{ color: "green", margin: 0 }}>
