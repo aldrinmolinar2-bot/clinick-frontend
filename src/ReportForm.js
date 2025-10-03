@@ -15,10 +15,13 @@ export default function ReportForm() {
   });
   const [popup, setPopup] = useState(false);
 
-  // Debug log whenever popup changes
+  // Track popup state (no alerts/log spam)
   useEffect(() => {
-    console.log("📢 Popup state changed:", popup);
-    if (popup) alert("DEBUG: Popup should now be showing!");
+    if (popup) {
+      // auto close after 3s
+      const timer = setTimeout(() => setPopup(false), 3000);
+      return () => clearTimeout(timer);
+    }
   }, [popup]);
 
   const handleChange = (e) =>
@@ -33,12 +36,8 @@ export default function ReportForm() {
         body: JSON.stringify(form),
       });
 
-      console.log("📡 Server response:", res.status);
-
       if (res.ok) {
-        console.log("✅ Report submitted successfully, showing popup...");
         setPopup(true);
-
         setForm({
           role: "",
           patientName: "",
@@ -47,17 +46,10 @@ export default function ReportForm() {
           severity: "",
           symptoms: "",
         });
-
-        setTimeout(() => {
-          console.log("⏱ Closing popup...");
-          setPopup(false);
-        }, 3000);
       } else {
-        console.error("❌ Failed response:", res.status);
         alert("❌ Failed to submit. Please try again.");
       }
     } catch (err) {
-      console.error("⚠️ Report submission error:", err);
       alert("⚠️ Server error. Please check your connection.");
     }
   };
@@ -155,42 +147,34 @@ export default function ReportForm() {
 
       {/* Popup */}
       {popup && (
-        <>
-          {/* Debug visible text */}
-          <div style={{ color: "red", fontWeight: "bold", marginTop: "20px" }}>
-            DEBUG: Popup is ACTIVE
-          </div>
-
-          {/* Overlay */}
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            background: "rgba(0,0,0,0.6)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 9999,
+          }}
+        >
           <div
             style={{
-              position: "fixed",
-              top: 0,
-              left: 0,
-              width: "100%",
-              height: "100%",
-              background: "rgba(0,0,0,0.6)",
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              zIndex: 9999,
+              background: "#fff",
+              padding: "25px 40px",
+              borderRadius: "10px",
+              textAlign: "center",
+              boxShadow: "0 6px 15px rgba(0,0,0,0.3)",
             }}
           >
-            <div
-              style={{
-                background: "#fff",
-                padding: "25px 40px",
-                borderRadius: "10px",
-                textAlign: "center",
-                boxShadow: "0 6px 15px rgba(0,0,0,0.3)",
-              }}
-            >
-              <h2 style={{ color: "green", margin: 0 }}>
-                ✅ The clinic has been alerted!
-              </h2>
-            </div>
+            <h2 style={{ color: "green", margin: 0 }}>
+              ✅ The clinic has been alerted!
+            </h2>
           </div>
-        </>
+        </div>
       )}
     </div>
   );
