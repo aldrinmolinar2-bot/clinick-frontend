@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 // Use deployed backend as fallback if env variable missing
 const API =
@@ -15,6 +15,12 @@ export default function ReportForm() {
   });
   const [popup, setPopup] = useState(false);
 
+  // Debug log whenever popup changes
+  useEffect(() => {
+    console.log("📢 Popup state changed:", popup);
+    if (popup) alert("DEBUG: Popup should now be showing!");
+  }, [popup]);
+
   const handleChange = (e) =>
     setForm({ ...form, [e.target.name]: e.target.value });
 
@@ -26,6 +32,8 @@ export default function ReportForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
+
+      console.log("📡 Server response:", res.status);
 
       if (res.ok) {
         console.log("✅ Report submitted successfully, showing popup...");
@@ -147,35 +155,42 @@ export default function ReportForm() {
 
       {/* Popup */}
       {popup && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            background: "rgba(0,0,0,0.6)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            zIndex: 9999,
-          }}
-        >
+        <>
+          {/* Debug visible text */}
+          <div style={{ color: "red", fontWeight: "bold", marginTop: "20px" }}>
+            DEBUG: Popup is ACTIVE
+          </div>
+
+          {/* Overlay */}
           <div
             style={{
-              background: "#fff",
-              padding: "25px 40px",
-              borderRadius: "10px",
-              textAlign: "center",
-              boxShadow: "0 6px 15px rgba(0,0,0,0.3)",
-              animation: "fadeIn 0.3s ease-in-out",
+              position: "fixed",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+              background: "rgba(0,0,0,0.6)",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              zIndex: 9999,
             }}
           >
-            <h2 style={{ color: "green", margin: 0 }}>
-              ✅ The clinic has been alerted!
-            </h2>
+            <div
+              style={{
+                background: "#fff",
+                padding: "25px 40px",
+                borderRadius: "10px",
+                textAlign: "center",
+                boxShadow: "0 6px 15px rgba(0,0,0,0.3)",
+              }}
+            >
+              <h2 style={{ color: "green", margin: 0 }}>
+                ✅ The clinic has been alerted!
+              </h2>
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
