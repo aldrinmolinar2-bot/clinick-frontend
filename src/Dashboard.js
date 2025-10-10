@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { requestPermission, listenForMessages } from "../firebase"; // ✅ added import
 
 const API = process.env.REACT_APP_API_URL || "http://localhost:5000";
 const VALID_TOKEN = "clinick-token";
@@ -15,6 +16,20 @@ export default function Dashboard() {
   const pollingRef = useRef(null);
 
   const navigate = useNavigate();
+
+  // ✅ Load dashboard manifest for installable dashboard app
+  useEffect(() => {
+    const link = document.createElement("link");
+    link.rel = "manifest";
+    link.href = "/manifest-dashboard.json";
+    document.head.appendChild(link);
+  }, []);
+
+  // ✅ Ask for notification permission and set up listener on load
+  useEffect(() => {
+    requestPermission(); // get FCM token and send to backend
+    listenForMessages(); // handle foreground notifications
+  }, []);
 
   // Persist alarmed IDs
   const persistAlarmedIds = () => {
