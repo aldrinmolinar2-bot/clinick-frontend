@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { requestPermission, listenForMessages } from "../firebase"; // ✅ added import
+import { requestPermission, listenForMessages } from "./firebase"; // ✅ added import
 
 const API = process.env.REACT_APP_API_URL || "http://localhost:5000";
 const VALID_TOKEN = "clinick-token";
