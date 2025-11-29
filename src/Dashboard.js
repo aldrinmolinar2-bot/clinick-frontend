@@ -17,7 +17,7 @@ export default function Dashboard() {
     const now = new Date();
     const y = now.getFullYear();
     const m = String(now.getMonth() + 1).padStart(2, "0");
-    return `${y}-${m}`; // YYYY-MM
+    return `${y}-${m}`; // YYYY-MM default (current month)
   });
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
 
@@ -115,7 +115,7 @@ export default function Dashboard() {
       alarmedIdsRef.current.add(report._id);
       persistAlarmedIds();
 
-      // mark as seen in backend
+      // mark as seen in backend (best-effort)
       await fetch(`${API}/reports/${report._id}/seen`, { method: "PUT" }).catch((e) =>
         console.warn("Failed to mark seen:", e)
       );
@@ -134,10 +134,12 @@ export default function Dashboard() {
         return;
       }
 
+      // Build URL and append query params only if month/year available
       const [year, month] = selectedMonth ? selectedMonth.split("-") : [];
       const url = new URL(`${API}/reports`);
       if (month && year) {
-        url.searchParams.append("month", String(Number(month))); // e.g. "03" -> 3
+        // backend expects month as number 1-12
+        url.searchParams.append("month", String(Number(month)));
         url.searchParams.append("year", String(Number(year)));
       }
 
@@ -147,7 +149,7 @@ export default function Dashboard() {
 
       if (!res.ok) {
         console.error("Failed to fetch reports:", res.status);
-        setReports([]); // clear on failure to avoid stale data
+        setReports([]); // clear on failure
         return;
       }
 
@@ -180,12 +182,13 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // fetch on mount and when selectedMonth changes; set polling
+  // fetch on mount and whenever selectedMonth changes; set polling as well
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token || token !== VALID_TOKEN) return;
 
     fetchReports();
+
     if (pollingRef.current) {
       clearInterval(pollingRef.current);
       pollingRef.current = null;
@@ -219,6 +222,7 @@ export default function Dashboard() {
     }
     const [year, month] = selectedMonth.split("-");
     const a = document.createElement("a");
+    // ensure month is number (no leading zero); backend expects 1-12
     a.href = `${API}/export-reports?month=${String(Number(month))}&year=${String(Number(year))}`;
     a.download = `clinick-report-${year}-${month}.csv`;
     document.body.appendChild(a);
@@ -463,9 +467,7 @@ export default function Dashboard() {
                   <td style={cellStyle}>{r.incident || ""}</td>
                   <td style={cellStyle}>{r.severity || ""}</td>
                   <td style={cellStyle}>
-                    {symptoms.length > maxLength && !isExpanded
-                      ? symptoms.substring(0, maxLength) + "..."
-                      : symptoms}
+                    {symptoms.length > maxLength && !isExpanded ? symptoms.substring(0, maxLength) + "..." : symptoms}
                     {symptoms.length > maxLength && (
                       <button
                         onClick={() => toggleSymptoms(r._id)}
