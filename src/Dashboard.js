@@ -181,6 +181,31 @@ export default function Dashboard() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h1 style={{ marginBottom: "20px" }}>Clinic Dashboard</h1>
         <button
+  onClick={() => {
+    const m = prompt("Enter month (1-12):");
+    const y = prompt("Enter year (e.g. 2025):");
+
+    if (!m || !y) return;
+
+    const link = document.createElement("a");
+    link.href = `${API}/export-reports?month=${m}&year=${y}`;
+    link.download = `clinick-report-${y}-${m}.csv`;
+    link.click();
+  }}
+  style={{
+    padding: "8px 16px",
+    backgroundColor: "#3182ce",
+    color: "white",
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer",
+    marginRight: "10px"
+  }}
+>
+  Download Reports
+</button>
+
+        <button
           onClick={handleLogout}
           style={{
             padding: "8px 16px",
