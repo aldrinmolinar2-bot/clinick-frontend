@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { requestPermission, listenForMessages } from "./firebase"; // ✅ added import
+import jsPDF from "jspdf";
+import "jspdf-autotable";
+import { requestPermission, listenForMessages } from "./firebase";
 
 const API = process.env.REACT_APP_API_URL || "http://localhost:5000";
 const VALID_TOKEN = "clinick-token";
@@ -10,6 +12,7 @@ export default function Dashboard() {
   const [reports, setReports] = useState([]);
   const [expandedRows, setExpandedRows] = useState({});
   const [activeAlarms, setActiveAlarms] = useState([]);
+  const [selectedMonth, setSelectedMonth] = useState(""); // YYYY-MM value
 
   const activeAlarmsRef = useRef([]);
   const alarmedIdsRef = useRef(new Set());
@@ -17,7 +20,7 @@ export default function Dashboard() {
 
   const navigate = useNavigate();
 
-  // ✅ Load dashboard manifest for installable dashboard app
+  // 📌 Add manifest for installable app
   useEffect(() => {
     const link = document.createElement("link");
     link.rel = "manifest";
@@ -25,23 +28,20 @@ export default function Dashboard() {
     document.head.appendChild(link);
   }, []);
 
-  // ✅ Ask for notification permission and set up listener on load
+  // 📌 Notification permission + listener
   useEffect(() => {
-    requestPermission(); // get FCM token and send to backend
-    listenForMessages(); // handle foreground notifications
+    requestPermission();
+    listenForMessages();
   }, []);
 
-  // Persist alarmed IDs
+  // 📌 Persist alarmed IDs
   const persistAlarmedIds = () => {
     try {
       const arr = Array.from(alarmedIdsRef.current);
       localStorage.setItem(ALARMED_STORAGE_KEY, JSON.stringify(arr));
-    } catch (e) {
-      console.error("persistAlarmedIds error", e);
-    }
+    } catch {}
   };
 
-  // Load alarmed IDs from storage
   const loadAlarmedIds = () => {
     try {
       const raw = localStorage.getItem(ALARMED_STORAGE_KEY);
@@ -50,21 +50,18 @@ export default function Dashboard() {
       if (Array.isArray(arr)) {
         alarmedIdsRef.current = new Set(arr);
       }
-    } catch (e) {
-      console.warn("loadAlarmedIds failed - resetting", e);
+    } catch {
       alarmedIdsRef.current = new Set();
     }
   };
 
-  // Stop all alarms
+  // 📌 Stop all alarms
   const stopAllAlarms = () => {
     try {
       activeAlarmsRef.current.forEach((a) => {
         if (a.audio) {
-          try {
-            a.audio.pause();
-            a.audio.currentTime = 0;
-          } catch (e) {}
+          a.audio.pause();
+          a.audio.currentTime = 0;
         }
       });
     } finally {
@@ -73,7 +70,7 @@ export default function Dashboard() {
     }
   };
 
-  // Trigger alarm for unseen report
+  // 📌 Trigger alarm for unseen report
   const triggerAlarmForReport = async (report) => {
     if (!report || !report._id) return;
     if (alarmedIdsRef.current.has(report._id)) return;
@@ -81,7 +78,7 @@ export default function Dashboard() {
     try {
       const audio = new Audio("/siren.mp3");
       audio.loop = true;
-      audio.play().catch((err) => console.error("Autoplay blocked:", err));
+      audio.play().catch(() => {});
 
       const alarmObj = { id: report._id, location: report.location, audio };
       activeAlarmsRef.current = [...activeAlarmsRef.current, alarmObj];
@@ -89,14 +86,11 @@ export default function Dashboard() {
       alarmedIdsRef.current.add(report._id);
       persistAlarmedIds();
 
-      // ✅ mark as seen in backend
       await fetch(`${API}/reports/${report._id}/seen`, { method: "PUT" });
-    } catch (e) {
-      console.error("triggerAlarmForReport error", e);
-    }
+    } catch {}
   };
 
-  // Fetch reports
+  // 📌 Fetch reports with optional month filtering
   const fetchReports = async () => {
     try {
       const token = localStorage.getItem("token");
@@ -105,215 +99,279 @@ export default function Dashboard() {
         return;
       }
 
-      const res = await fetch(`${API}/reports`, {
+      // Build query
+      let url = `${API}/reports`;
+
+      if (selectedMonth) {
+        const [year, month] = selectedMonth.split("-");
+        url += `?month=${month}&year=${year}`;
+      }
+
+      const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) {
-        console.error("Failed to fetch reports:", res.status);
-        return;
-      }
+
+      if (!res.ok) return;
+
       const data = await res.json();
       const reportArray = Array.isArray(data) ? data : [];
+
       setReports(reportArray);
 
-      // Find unseen reports
+      // New unseen alarms
       const unseen = reportArray.filter((r) => !r.seen);
-      unseen.forEach((r) => triggerAlarmForReport(r));
-    } catch (err) {
-      console.error("Error fetching reports:", err);
-    }
+      unseen.forEach(triggerAlarmForReport);
+    } catch {}
   };
 
+  // 📌 Load alarms, stop on unmount
   useEffect(() => {
     loadAlarmedIds();
     stopAllAlarms();
 
     return () => {
       persistAlarmedIds();
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
+      if (pollingRef.current) clearInterval(pollingRef.current);
       stopAllAlarms();
     };
   }, []);
 
+  // 📌 Auto-fetch & poll every 5s
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token || token !== VALID_TOKEN) return;
-
     fetchReports();
     pollingRef.current = setInterval(fetchReports, 5000);
 
-    return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
-    };
-  }, []);
+    return () => clearInterval(pollingRef.current);
+  }, [selectedMonth]); // refetch when month changes
 
+  // 📌 Logout
   const handleLogout = () => {
     localStorage.removeItem("token");
     stopAllAlarms();
     navigate("/login");
   };
 
-  const stopAlarm = (id) => {
-    activeAlarmsRef.current.forEach((a) => {
-      if (a.id === id && a.audio) {
-        try {
-          a.audio.pause();
-          a.audio.currentTime = 0;
-        } catch (e) {}
-      }
-    });
-    activeAlarmsRef.current = activeAlarmsRef.current.filter((a) => a.id !== id);
-    setActiveAlarms((prev) => prev.filter((a) => a.id !== id));
+  // 📌 Expand symptoms
+  const toggleSymptoms = (id) =>
+    setExpandedRows((prev) => ({ ...prev, [id]: !prev[id] }));
+
+  // 📌 Download CSV
+  const downloadCSV = () => {
+    if (!selectedMonth) return alert("Please select a month first.");
+
+    const [year, month] = selectedMonth.split("-");
+    const link = document.createElement("a");
+    link.href = `${API}/export-reports?month=${month}&year=${year}`;
+    link.download = `clinick-report-${year}-${month}.csv`;
+    link.click();
   };
 
-  const toggleSymptoms = (id) => {
-    setExpandedRows((prev) => ({ ...prev, [id]: !prev[id] }));
+  // 📌 Export PDF that matches dashboard
+  const downloadPDF = () => {
+    if (!selectedMonth) return alert("Please select a month first.");
+
+    const doc = new jsPDF({ orientation: "landscape" });
+
+    doc.setFontSize(18);
+    doc.text("Clinick Monthly Report", 14, 15);
+
+    const [year, month] = selectedMonth.split("-");
+    doc.setFontSize(12);
+    doc.text(`Month: ${month} / Year: ${year}`, 14, 25);
+
+    const tableData = reports.map((r) => [
+      r.role,
+      r.patientName,
+      r.location,
+      r.incident,
+      r.severity,
+      r.symptoms,
+      new Date(r.createdAt).toLocaleString(),
+    ]);
+
+    doc.autoTable({
+      startY: 35,
+      head: [["Role", "Patient Name", "Location", "Incident", "Severity", "Symptoms", "Time"]],
+      body: tableData,
+    });
+
+    doc.save(`clinick-report-${year}-${month}.pdf`);
   };
 
   return (
     <div style={{ maxWidth: "1000px", margin: "40px auto", fontFamily: "Arial, sans-serif" }}>
+      {/* HEADER */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h1 style={{ marginBottom: "20px" }}>Clinic Dashboard</h1>
-        <button
-  onClick={() => {
-    const m = prompt("Enter month (1-12):");
-    const y = prompt("Enter year (e.g. 2025):");
+        <h1>Clinic Dashboard</h1>
 
-    if (!m || !y) return;
+        <div style={{ display: "flex", gap: "10px" }}>
+          {/* 📌 Month picker */}
+          <input
+            type="month"
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            style={{
+              padding: "8px",
+              borderRadius: "6px",
+              border: "1px solid #ccc",
+              cursor: "pointer",
+            }}
+          />
 
-    const link = document.createElement("a");
-    link.href = `${API}/export-reports?month=${m}&year=${y}`;
-    link.download = `clinick-report-${y}-${m}.csv`;
-    link.click();
-  }}
-  style={{
-    padding: "8px 16px",
-    backgroundColor: "#3182ce",
-    color: "white",
-    border: "none",
-    borderRadius: "6px",
-    cursor: "pointer",
-    marginRight: "10px"
-  }}
->
-  Download Reports
-</button>
+          {/* 📌 Export dropdown */}
+          <div style={{ position: "relative" }}>
+            <button
+              onClick={(e) => {
+                const menu = e.target.nextSibling;
+                menu.style.display = menu.style.display === "block" ? "none" : "block";
+              }}
+              style={{
+                padding: "8px 16px",
+                backgroundColor: "#3182ce",
+                color: "white",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+              }}
+            >
+              Download ▼
+            </button>
 
-        <button
-          onClick={handleLogout}
-          style={{
-            padding: "8px 16px",
-            backgroundColor: "#e53e3e",
-            color: "white",
-            border: "none",
-            borderRadius: "6px",
-            cursor: "pointer",
-          }}
-        >
-          Logout
-        </button>
+            <div
+              style={{
+                display: "none",
+                position: "absolute",
+                right: 0,
+                background: "white",
+                border: "1px solid #ccc",
+                borderRadius: "6px",
+                boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+                zIndex: 10,
+              }}
+            >
+              <button
+                onClick={downloadCSV}
+                style={{
+                  padding: "10px 20px",
+                  border: "none",
+                  width: "100%",
+                  textAlign: "left",
+                  background: "white",
+                  cursor: "pointer",
+                }}
+              >
+                Download CSV
+              </button>
+              <button
+                onClick={downloadPDF}
+                style={{
+                  padding: "10px 20px",
+                  border: "none",
+                  width: "100%",
+                  textAlign: "left",
+                  background: "white",
+                  cursor: "pointer",
+                }}
+              >
+                Download PDF
+              </button>
+            </div>
+          </div>
+
+          {/* Logout */}
+          <button
+            onClick={handleLogout}
+            style={{
+              padding: "8px 16px",
+              backgroundColor: "#e53e3e",
+              color: "white",
+              border: "none",
+              borderRadius: "6px",
+              cursor: "pointer",
+            }}
+          >
+            Logout
+          </button>
+        </div>
       </div>
 
+      {/* 🚨 ALARM MODAL */}
       {activeAlarms.map((alarm) => (
         <div
           key={alarm.id}
           style={{
             position: "fixed",
-            top: "0",
-            left: "0",
+            top: 0,
+            left: 0,
             width: "100%",
             height: "100%",
-            backgroundColor: "rgba(0,0,0,0.7)",
+            background: "rgba(0,0,0,0.7)",
             display: "flex",
             flexDirection: "column",
             justifyContent: "center",
             alignItems: "center",
-            zIndex: "9999",
+            zIndex: 9999,
           }}
         >
-          <h2 style={{ color: "white", fontSize: "28px", marginBottom: "20px" }}>
+          <h2 style={{ color: "white", fontSize: "28px" }}>
             🚨 EMERGENCY ON {alarm.location}
           </h2>
-          <button
-            onClick={() => stopAlarm(alarm.id)}
-            style={{
-              padding: "20px 40px",
-              fontSize: "24px",
-              fontWeight: "bold",
-              backgroundColor: "#e53e3e",
-              color: "white",
-              border: "none",
-              borderRadius: "10px",
-              cursor: "pointer",
-              boxShadow: "0 0 20px rgba(255,0,0,0.8)",
-              animation: "pulse 1s infinite",
-            }}
-          >
-            STOP ALARM
-          </button>
         </div>
       ))}
 
-      <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #000" }}>
+      {/* TABLE */}
+      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "20px" }}>
         <thead>
           <tr>
-            <th style={{ border: "1px solid #000", padding: "8px" }}>Role</th>
-            <th style={{ border: "1px solid #000", padding: "8px" }}>Patient Name</th>
-            <th style={{ border: "1px solid #000", padding: "8px" }}>Location</th>
-            <th style={{ border: "1px solid #000", padding: "8px" }}>Incident</th>
-            <th style={{ border: "1px solid #000", padding: "8px" }}>Severity</th>
-            <th style={{ border: "1px solid #000", padding: "8px" }}>Symptoms</th>
-            <th style={{ border: "1px solid #000", padding: "8px" }}>Time</th>
+            <th>Role</th>
+            <th>Patient</th>
+            <th>Location</th>
+            <th>Incident</th>
+            <th>Severity</th>
+            <th>Symptoms</th>
+            <th>Time</th>
           </tr>
         </thead>
+
         <tbody>
           {reports.length === 0 ? (
             <tr>
               <td colSpan="7" style={{ textAlign: "center", padding: "10px" }}>
-                No reports yet
+                No reports for selected month
               </td>
             </tr>
           ) : (
             reports.map((r) => {
-              const isExpanded = expandedRows[r._id] || false;
-              const maxLength = 50;
+              const expanded = expandedRows[r._id] || false;
+              const maxLen = 50;
               return (
                 <tr key={r._id}>
-                  <td style={{ border: "1px solid #000", padding: "8px" }}>{r.role}</td>
-                  <td style={{ border: "1px solid #000", padding: "8px" }}>{r.patientName}</td>
-                  <td style={{ border: "1px solid #000", padding: "8px" }}>{r.location}</td>
-                  <td style={{ border: "1px solid #000", padding: "8px" }}>{r.incident}</td>
-                  <td style={{ border: "1px solid #000", padding: "8px" }}>{r.severity}</td>
-                  <td style={{ border: "1px solid #000", padding: "8px" }}>
-                    {r.symptoms.length > maxLength && !isExpanded
-                      ? r.symptoms.substring(0, maxLength) + "..."
-                      : r.symptoms}
-                    {r.symptoms.length > maxLength && (
+                  <td>{r.role}</td>
+                  <td>{r.patientName}</td>
+                  <td>{r.location}</td>
+                  <td>{r.incident}</td>
+                  <td>{r.severity}</td>
+                  <td>
+                    {expanded || r.symptoms.length <= maxLen
+                      ? r.symptoms
+                      : r.symptoms.substring(0, maxLen) + "..."}
+                    {r.symptoms.length > maxLen && (
                       <button
                         onClick={() => toggleSymptoms(r._id)}
                         style={{
                           marginLeft: "8px",
                           border: "none",
-                          background: "none",
                           color: "blue",
+                          background: "none",
                           cursor: "pointer",
                           textDecoration: "underline",
-                          fontSize: "12px",
                         }}
                       >
-                        {isExpanded ? "Show less" : "Show more"}
+                        {expanded ? "Show less" : "Show more"}
                       </button>
                     )}
                   </td>
-                  <td style={{ border: "1px solid #000", padding: "8px" }}>
-                    {new Date(r.createdAt).toLocaleString()}
-                  </td>
+                  <td>{new Date(r.createdAt).toLocaleString()}</td>
                 </tr>
               );
             })
