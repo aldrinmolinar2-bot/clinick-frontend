@@ -105,7 +105,6 @@ export default function Dashboard() {
       const audio = new Audio("/siren.mp3");
       audio.loop = true;
       audio.play().catch((err) => {
-        // autoplay may be blocked; still proceed
         console.warn("Autoplay blocked:", err);
       });
 
@@ -115,7 +114,6 @@ export default function Dashboard() {
       alarmedIdsRef.current.add(report._id);
       persistAlarmedIds();
 
-      // mark as seen in backend (best-effort)
       await fetch(`${API}/reports/${report._id}/seen`, { method: "PUT" }).catch((e) =>
         console.warn("Failed to mark seen:", e)
       );
@@ -129,16 +127,13 @@ export default function Dashboard() {
     try {
       const token = localStorage.getItem("token");
       if (!token || token !== VALID_TOKEN) {
-        // not logged in/authorized
         stopAllAlarms();
         return;
       }
 
-      // Build URL and append query params only if month/year available
       const [year, month] = selectedMonth ? selectedMonth.split("-") : [];
       const url = new URL(`${API}/reports`);
       if (month && year) {
-        // backend expects month as number 1-12
         url.searchParams.append("month", String(Number(month)));
         url.searchParams.append("year", String(Number(year)));
       }
@@ -149,7 +144,7 @@ export default function Dashboard() {
 
       if (!res.ok) {
         console.error("Failed to fetch reports:", res.status);
-        setReports([]); // clear on failure
+        setReports([]);
         return;
       }
 
@@ -157,7 +152,6 @@ export default function Dashboard() {
       const reportArray = Array.isArray(data) ? data : [];
       setReports(reportArray);
 
-      // trigger alarms for unseen
       const unseen = reportArray.filter((r) => !r.seen);
       unseen.forEach((r) => triggerAlarmForReport(r));
     } catch (err) {
@@ -179,7 +173,6 @@ export default function Dashboard() {
       }
       stopAllAlarms();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // fetch on mount and whenever selectedMonth changes; set polling as well
@@ -201,7 +194,6 @@ export default function Dashboard() {
         pollingRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMonth]);
 
   const handleLogout = () => {
@@ -222,7 +214,6 @@ export default function Dashboard() {
     }
     const [year, month] = selectedMonth.split("-");
     const a = document.createElement("a");
-    // ensure month is number (no leading zero); backend expects 1-12
     a.href = `${API}/export-reports?month=${String(Number(month))}&year=${String(Number(year))}`;
     a.download = `clinick-report-${year}-${month}.csv`;
     document.body.appendChild(a);
@@ -231,20 +222,22 @@ export default function Dashboard() {
     setDownloadMenuOpen(false);
   };
 
-  // Download PDF of current table
+  // ⭐⭐⭐ FIXED PDF GENERATOR ⭐⭐⭐
   const downloadPDF = () => {
     if (!selectedMonth) {
       alert("Please select a month first.");
       return;
     }
+
     try {
-      if (!jsPDF) throw new Error("jsPDF not available");
       const doc = new jsPDF({ orientation: "landscape" });
-      doc.setFontSize(16);
-      doc.text("Clinick Dashboard Report", 14, 18);
+
       const [year, month] = selectedMonth.split("-");
-      doc.setFontSize(11);
-      doc.text(`Month: ${month}   Year: ${year}`, 14, 26);
+      doc.setFontSize(18);
+      doc.text("Clinick Dashboard Report", 14, 16);
+
+      doc.setFontSize(12);
+      doc.text(`Month: ${month}   Year: ${year}`, 14, 24);
 
       const rows = reports.map((r) => [
         r.role || "",
@@ -256,22 +249,22 @@ export default function Dashboard() {
         r.createdAt ? new Date(r.createdAt).toLocaleString() : "",
       ]);
 
-      // @ts-ignore
       doc.autoTable({
-        startY: 34,
+        startY: 32,
         head: [["Role", "Patient Name", "Location", "Incident", "Severity", "Symptoms", "Time"]],
         body: rows,
         styles: { fontSize: 9 },
-        headStyles: { fillColor: [22, 160, 133] },
+        headStyles: { fillColor: [41, 128, 185] },
+        tableWidth: "auto",
       });
 
       doc.save(`clinick-report-${year}-${month}.pdf`);
-    } catch (e) {
-      console.error("downloadPDF error", e);
-      alert("Unable to generate PDF. Make sure jspdf and jspdf-autotable are installed.");
-    } finally {
-      setDownloadMenuOpen(false);
+    } catch (err) {
+      console.error("PDF error:", err);
+      alert("Unable to generate PDF. Check console.");
     }
+
+    setDownloadMenuOpen(false);
   };
 
   // Close download menu if clicked outside
